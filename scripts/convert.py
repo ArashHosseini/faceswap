@@ -1,6 +1,7 @@
 import cv2
 import time
 import re
+import datetime
 
 from pathlib import Path
 from tqdm import tqdm
@@ -51,7 +52,7 @@ class ConvertImage(DirectoryProcessor):
         parser.add_argument('-D', '--detector',
                             type=str,
                             choices=("hog", "cnn"), # case sensitive because this is used to load a plugin.
-                            default="hog",
+                            default="cnn",
                             help="Detector to use. 'cnn' detects much more angles but will be much more resource intensive and may fail on large files.")
 
         parser.add_argument('-fr', '--frame-ranges',
@@ -84,7 +85,7 @@ class ConvertImage(DirectoryProcessor):
         parser.add_argument('-S', '--seamless',
                             action="store_true",
                             dest="seamless_clone",
-                            default=False,
+                            default=True,
                             help="Seamless mode. (Masked converter only)")
 
         parser.add_argument('-M', '--mask-type',
@@ -157,6 +158,8 @@ class ConvertImage(DirectoryProcessor):
         # last number regex. I know regex is hacky, but its reliablyhacky(tm).
         self.imageidxre = re.compile(r'(\d+)(?!.*\d)')
 
+        self.input_len = len(self.read_directory())
+        self.done = 0
         for item in batch.iterator():
             self.convert(converter, item)
     
@@ -169,6 +172,7 @@ class ConvertImage(DirectoryProcessor):
 
     def convert(self, converter, item):
         try:
+            start = time.time() 
             (filename, image, faces) = item
 
             skip = self.check_skipframe(filename)
@@ -182,7 +186,9 @@ class ConvertImage(DirectoryProcessor):
             output_file = get_folder(self.output_dir) / Path(filename).name
             cv2.imwrite(str(output_file), image)
             tt = time.time() - start
-            print ("takes {0}".format(tt))
+            estimate = (self.input_len-self.done) * tt
+            print ("takes {0}, time left {1}".format(tt, str(datetime.timedelta(seconds=int(estimate)))))
+            self.done += 1
         except Exception as e:
             print('Failed to convert image: {}. Reason: {}'.format(filename, e))
 
