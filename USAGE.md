@@ -43,7 +43,7 @@ python faceswap.py train -A ~/faceswap/data/trump -B ~/faceswap/data/cage -m ~/f
 python faceswap.py train -A ~/faceswap/data/trump -B ~/faceswap/data/cage -m ~/faceswap/models/ -p 
 ```
 
-If you use the preview feature, select the preview window and press Q to save your processed data and quit gracefully. Without the preview enabled, you might have to forcefully quit by hitting Ctrl+C to cancel the command. Note that it will save the model once it's gone through about 100 iterations, which can take quite a while. So make sure you save before stopping the process.
+If you use the preview feature, select the preview window and press ENTER to save your processed data and quit gracefully. Without the preview enabled, you might have to forcefully quit by hitting Ctrl+C to cancel the command. Note that it will save the model once it's gone through about 100 iterations, which can take quite a while. So make sure you save before stopping the process.
 
 You can see the full list of arguments for training via help flag. i.e.
 
@@ -82,7 +82,7 @@ ffmpeg -i /path/to/my/video.mp4 /path/to/output/video-frame-%d.png
 If you split a video, using [ffmpeg](https://www.ffmpeg.org) for example, and used them as a target for swapping faces onto you can combine these frames again. The command below stitches the png frames back into a single video again.
 
 ```bash
-ffmpeg -i video-frame-%04d.png -c:v libx264 -vf "fps=25,format=yuv420p" out.mp4
+ffmpeg -i video-frame-%0d.png -c:v libx264 -vf "fps=25,format=yuv420p" out.mp4
 ```
 
 ## Notes
