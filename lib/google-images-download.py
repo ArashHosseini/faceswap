@@ -37,6 +37,8 @@ class Image_Scraping(object):
     def __init__(self, 
                 search_keyword = [],
                 output = "",
+                chips = "",
+                unique=False,
                 limit = 20,
                 thread = 2,
                 scroll = 200,
@@ -48,21 +50,26 @@ class Image_Scraping(object):
         self.fin = 0
         self.search_keyword = search_keyword
         self.output = output
+        self.chips = chips
+        self.unique = unique
         self.max = limit
         self.thread = thread
         self.scroll = scroll
-        self.proxy_ip, self.proxy_port = zip(proxy.split(":")[-2:])
         self.color = color
         self.image_type = image_type
-        if self.proxy_ip:
-            self.proxyDict = { 
-                              "http"  : str(self.proxy_ip[0]), 
-                              "https" : str(self.proxy_ip[0])
-                              }
+        self.proxy_ip = proxy
+        self.proxy_port = proxy
+        if proxy:
+            self.proxy_ip, self.proxy_port = zip(proxy.split(":")[-2:])
+            if self.proxy_ip:
+                self.proxyDict = { 
+                                  "http"  : str(self.proxy_ip[0]), 
+                                  "https" : str(self.proxy_ip[0])
+                                  }
 
-            #Request urlopen
-            os.environ["http_proxy"]=proxy
-            os.environ["https_proxy"]=proxy
+                #Request urlopen
+                os.environ["http_proxy"]=proxy
+                os.environ["https_proxy"]=proxy
         
 
     def get_folder(self, path):
@@ -75,8 +82,7 @@ class Image_Scraping(object):
             return True
 
     def collector(self, url, html_link_queue, end):
-
-        browser = webdriver.Firefox
+        browser = webdriver.Firefox()
 
         if self.proxy_ip:
             capabilities = webdriver.DesiredCapabilities().FIREFOX
@@ -97,20 +103,17 @@ class Image_Scraping(object):
 
         while True:
             browser.execute_script("window.scrollBy(0,{0})".format(int(self.scroll)))
-            for x in browser.find_elements_by_xpath("//a[@class='rg_l']"):
-                xx = x.get_attribute("href")
-                if xx:
-                    html_link_queue.put(xx)
+            for blk in browser.find_elements_by_xpath("//a[@class='rg_l']"):
+                image_link = blk.get_attribute("href")
+                if image_link:
+                    html_link_queue.put(image_link)
             if end.value:
                 break
         browser.close()
 
 
     def download_worker(self, args):
-        end = args[0]
-        html_link_queue = args[1]
-        thread = args[2]
-        dir_name = args[3]
+        end, html_link_queue, thread, dir_name = args
         while True:
             link = html_link_queue.get()
             try:
@@ -166,6 +169,7 @@ class Image_Scraping(object):
 
     def scraping(self, *args):
         i = 0
+        _start = time.time()
         while i < len(self.search_keyword):
             search_term = self.search_keyword[i]
             search = search_term.replace(' ', '%20')
@@ -176,23 +180,24 @@ class Image_Scraping(object):
                 #calc default path
                 file_path = os.path.dirname(os.path.realpath(__file__))
                 dir_name = new_path = os.path.join(file_path[:-len(os.path.basename(file_path))],\
-                 "data/raw_downloaded_image/{0}".format("{0}-{1}".format(search_term, str(self.color)) if self.color\
-                  else search_term))
+                 "data/raw_downloaded_image/{0}".format(search_term))
 
             if not os.path.exists(dir_name):
                 if not self.get_folder(dir_name):
                     raise Exception("cant create folder!!!")
             else:
-                if os.listdir(dir_name):
-                    dir_name = os.path.join(dir_name, str(uuid.uuid4()))
-                    if not self.get_folder(dir_name):
-                        raise Exception("cant create folder!!!")
+                if self.unique:
+                    #create unique folder, avoid overwrite
+                    if os.listdir(dir_name):
+                        dir_name = os.path.join(dir_name, str(uuid.uuid4()))
+                        if not self.get_folder(dir_name):
+                            raise Exception("cant create folder!!!")
 
-            _type = "tbs=itp:{0}".format(self.image_type)
+            _type = "tbs=itp:{0}".format(self.image_type) if self.image_type else ""
             logger.info("Saving Files in {0}".format(dir_name))
             color_param = ('&tbs=ic:specific,isc:' + self.color) if self.color else ''
-            url = 'https://www.google.com/search?q=' + search + '&espv=2&biw=1366&bih=667&site=webhp&source=lnms&'+ _type +'&tbm=isch' + color_param + '&sa=X&ei=XosDVaCXD8TasATItgE&ved=0CAcQ_AUoAg'
-            logger.info("Starting Download Process...")
+            url = 'https://www.google.com/search?q=' + search + '&espv=2&biw=1366&bih=667&site=webhp&source=lnms&'+ _type +'&tbm=isch' + color_param + '&sa=X&ei=XosDVaCXD8TasATItgE&ved=0CAcQ_AUoAg' + "&chips=q:" + search + ",online_chips:" + self.chips
+            logger.info("Starting Download Process...{0}".format(url))
 
             manager = multiprocessing.Manager()
             lifetime_end = manager.Value(ctypes.c_char_p, False)
@@ -225,14 +230,17 @@ class Image_Scraping(object):
                              pool)
 
             i = i + 1
+        logger.info("takes ~{0} seconds for {1} images".format(time.time()-_start, self.max))
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-k', '--keywords', help='delimited list input', type=str, required=True)
     parser.add_argument('-o', '--output', help='output directory', type=str, required=False)
+    parser.add_argument('-u', '--unique', help='create always new sub unique folder', type=bool, required=False, default=False)
     parser.add_argument('-m', '--max', help='maximal download images', type=int, required=False, default=1000)
     parser.add_argument('-t', '--thread', help='download workers range', type=int, required=False, default=6)
     parser.add_argument('-s', '--scroll', help='scroll range', type=int, required=False, default=1000)
+    parser.add_argument('-ch', '--chips', help='chips string', type=str, required=False)
     parser.add_argument('-p', '--proxy', help='proxy ip:port', type=str, required=False)
     parser.add_argument('-y', '--type', help='search image type', type=str, required=False, choices=['face', 'clipart', 'photo', 'lineart', 'animated'])
     parser.add_argument('-c', '--color', help='filter on color', type=str, required=False, choices=['red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink', 'white', 'gray', 'black', 'brown'])
@@ -249,6 +257,8 @@ if __name__=="__main__":
 
     search = Image_Scraping(search_keyword,
                             args.output,
+                            args.chips,
+                            args.unique, 
                             args.max,
                             args.thread,
                             args.scroll,
@@ -256,3 +266,4 @@ if __name__=="__main__":
                             args.color,
                             args.type)
     search.scraping()
+
